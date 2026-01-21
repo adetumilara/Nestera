@@ -145,3 +145,21 @@ fn test_data_key_savings_plan() {
         _ => panic!("Expected SavingsPlan data key"),
     }
 }
+
+#[test]
+fn test_xdr_compatibility_user() {
+    let env = Env::default();
+    let contract_id = env.register(NesteraContract, ());
+
+    let user = User {
+        total_balance: 1_500_000,
+        savings_count: 5,
+    };
+
+    let key = symbol_short!("testuser");
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&key, &user);
+        let retrieved_user: User = env.storage().instance().get(&key).unwrap();
+        assert_eq!(user, retrieved_user);
+    });
+}
