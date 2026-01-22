@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(non_snake_case)]
 use soroban_sdk::{contract, contractimpl};
 
 mod storage_types;

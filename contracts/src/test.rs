@@ -9,7 +9,7 @@ fn test_user_instantiation() {
         total_balance: 1_000_000,
         savings_count: 3,
     };
-    
+
     assert_eq!(user.total_balance, 1_000_000);
     assert_eq!(user.savings_count, 3);
 }
@@ -26,7 +26,7 @@ fn test_flexi_savings_plan() {
         interest_rate: 500, // 5.00% APY
         is_completed: false,
     };
-    
+
     assert_eq!(plan.plan_id, 1);
     assert_eq!(plan.plan_type, PlanType::Flexi);
     assert_eq!(plan.balance, 500_000);
@@ -46,7 +46,7 @@ fn test_lock_savings_plan() {
         interest_rate: 800,
         is_completed: false,
     };
-    
+
     assert_eq!(plan.plan_id, 2);
     match plan.plan_type {
         PlanType::Lock(until) => assert_eq!(until, locked_until),
@@ -70,14 +70,14 @@ fn test_goal_savings_plan() {
         interest_rate: 600,
         is_completed: false,
     };
-    
+
     assert_eq!(plan.plan_id, 3);
     match plan.plan_type {
         PlanType::Goal(category, target_amount, contribution_type) => {
             assert_eq!(category, symbol_short!("education"));
             assert_eq!(target_amount, 5_000_000);
             assert_eq!(contribution_type, 1u32);
-        },
+        }
         _ => panic!("Expected Goal plan type"),
     }
 }
@@ -86,12 +86,7 @@ fn test_goal_savings_plan() {
 fn test_group_savings_plan() {
     let plan = SavingsPlan {
         plan_id: 4,
-        plan_type: PlanType::Group(
-            101,
-            true,
-            2u32,
-            10_000_000
-        ),
+        plan_type: PlanType::Group(101, true, 2u32, 10_000_000),
         balance: 3_000_000,
         start_time: 1000000,
         last_deposit: 1600000,
@@ -99,7 +94,7 @@ fn test_group_savings_plan() {
         interest_rate: 700,
         is_completed: false,
     };
-    
+
     assert_eq!(plan.plan_id, 4);
     match plan.plan_type {
         PlanType::Group(group_id, is_public, contribution_type, target_amount) => {
@@ -107,7 +102,7 @@ fn test_group_savings_plan() {
             assert!(is_public);
             assert_eq!(contribution_type, 2u32);
             assert_eq!(target_amount, 10_000_000);
-        },
+        }
         _ => panic!("Expected Group plan type"),
     }
 }
@@ -123,7 +118,7 @@ fn test_data_key_user() {
     let env = Env::default();
     let user_address = Address::generate(&env);
     let key = DataKey::User(user_address.clone());
-    
+
     match key {
         DataKey::User(addr) => assert_eq!(addr, user_address),
         _ => panic!("Expected User data key"),
@@ -136,12 +131,12 @@ fn test_data_key_savings_plan() {
     let user_address = Address::generate(&env);
     let plan_id = 42;
     let key = DataKey::SavingsPlan(user_address.clone(), plan_id);
-    
+
     match key {
         DataKey::SavingsPlan(addr, id) => {
             assert_eq!(addr, user_address);
             assert_eq!(id, plan_id);
-        },
+        }
         _ => panic!("Expected SavingsPlan data key"),
     }
 }
@@ -168,7 +163,7 @@ fn test_xdr_compatibility_user() {
 fn test_xdr_compatibility_savings_plan() {
     let env = Env::default();
     let contract_id = env.register(NesteraContract, ());
-    
+
     let plan = SavingsPlan {
         plan_id: 1,
         plan_type: PlanType::Flexi,
@@ -179,7 +174,7 @@ fn test_xdr_compatibility_savings_plan() {
         interest_rate: 550,
         is_completed: false,
     };
-    
+
     let key = symbol_short!("testplan");
     env.as_contract(&contract_id, || {
         env.storage().instance().set(&key, &plan);
@@ -192,7 +187,7 @@ fn test_xdr_compatibility_savings_plan() {
 fn test_xdr_compatibility_all_plan_types() {
     let env = Env::default();
     let contract_id = env.register(NesteraContract, ());
-    
+
     env.as_contract(&contract_id, || {
         // Test Flexi
         let flexi_plan = SavingsPlan {
@@ -208,7 +203,7 @@ fn test_xdr_compatibility_all_plan_types() {
         env.storage().instance().set(&0u32, &flexi_plan);
         let retrieved: SavingsPlan = env.storage().instance().get(&0u32).unwrap();
         assert_eq!(flexi_plan, retrieved);
-        
+
         // Test Lock
         let lock_plan = SavingsPlan {
             plan_id: 1,
@@ -223,15 +218,11 @@ fn test_xdr_compatibility_all_plan_types() {
         env.storage().instance().set(&1u32, &lock_plan);
         let retrieved: SavingsPlan = env.storage().instance().get(&1u32).unwrap();
         assert_eq!(lock_plan, retrieved);
-        
+
         // Test Goal
         let goal_plan = SavingsPlan {
             plan_id: 2,
-            plan_type: PlanType::Goal(
-                symbol_short!("vacation"),
-                3_000_000,
-                1u32
-            ),
+            plan_type: PlanType::Goal(symbol_short!("vacation"), 3_000_000, 1u32),
             balance: 1_000_000,
             start_time: 1000000,
             last_deposit: 1100000,
@@ -242,16 +233,11 @@ fn test_xdr_compatibility_all_plan_types() {
         env.storage().instance().set(&2u32, &goal_plan);
         let retrieved: SavingsPlan = env.storage().instance().get(&2u32).unwrap();
         assert_eq!(goal_plan, retrieved);
-        
+
         // Test Group
         let group_plan = SavingsPlan {
             plan_id: 3,
-            plan_type: PlanType::Group(
-                200,
-                false,
-                3u32,
-                8_000_000
-            ),
+            plan_type: PlanType::Group(200, false, 3u32, 8_000_000),
             balance: 1_000_000,
             start_time: 1000000,
             last_deposit: 1100000,
@@ -269,11 +255,7 @@ fn test_xdr_compatibility_all_plan_types() {
 fn test_completed_plan() {
     let plan = SavingsPlan {
         plan_id: 5,
-        plan_type: PlanType::Goal(
-            symbol_short!("house"),
-            10_000_000,
-            2u32
-        ),
+        plan_type: PlanType::Goal(symbol_short!("house"), 10_000_000, 2u32),
         balance: 10_000_000,
         start_time: 1000000,
         last_deposit: 2000000,
@@ -281,7 +263,7 @@ fn test_completed_plan() {
         interest_rate: 650,
         is_completed: true,
     };
-    
+
     assert!(plan.is_completed);
     assert_eq!(plan.balance, 10_000_000);
 }
@@ -293,14 +275,14 @@ fn test_plan_type_patterns() {
     if let PlanType::Lock(timestamp) = lock_plan {
         assert_eq!(timestamp, 1234567);
     }
-    
+
     let goal_plan = PlanType::Goal(symbol_short!("car"), 2_000_000, 3u32);
     if let PlanType::Goal(cat, amount, contrib) = goal_plan {
         assert_eq!(cat, symbol_short!("car"));
         assert_eq!(amount, 2_000_000);
         assert_eq!(contrib, 3u32);
     }
-    
+
     let group_plan = PlanType::Group(999, true, 1u32, 5_000_000);
     if let PlanType::Group(id, public, contrib, amount) = group_plan {
         assert_eq!(id, 999);
