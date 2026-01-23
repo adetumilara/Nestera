@@ -1,6 +1,6 @@
 #![no_std]
 #![allow(non_snake_case)]
-use soroban_sdk::{contract, contractimpl};
+use soroban_sdk::{contract, contractimpl, Address, Env};
 
 mod storage_types;
 pub use storage_types::*;
@@ -11,16 +11,34 @@ pub use errors::*;
 #[contract]
 pub struct NesteraContract;
 
-// This is a sample contract. Replace this placeholder with your own contract logic.
-// A corresponding test example is available in `test.rs`.
-//
-// For comprehensive examples, visit <https://github.com/stellar/soroban-examples>.
-// The repository includes use cases for the Stellar ecosystem, such as data storage on
-// the blockchain, token swaps, liquidity pools, and more.
-//
-// Refer to the official documentation:
-// <https://developers.stellar.org/docs/build/smart-contracts/overview>.
 #[contractimpl]
-impl NesteraContract {}
+impl NesteraContract {
+    pub fn initialize(e: Env, admin: Address) {
+        if e.storage().instance().has(&DataKey::Admin) {
+            panic!("Admin already initialized");
+        }
+
+        admin.require_auth();
+
+        e.storage().instance().set(&DataKey::Admin, &admin);
+    }
+
+    pub fn update_admin(e: Env, new_admin: Address) {
+        let admin = Self::get_admin(&e);
+
+        admin.require_auth();
+
+        new_admin.require_auth();
+
+        e.storage().instance().set(&DataKey::Admin, &new_admin);
+    }
+
+    pub fn get_admin(e: &Env) -> Address {
+        e.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("Admin not initialized")
+    }
+}
 
 mod test;
