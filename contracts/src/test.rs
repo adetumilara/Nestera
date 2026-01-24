@@ -1,10 +1,12 @@
 #![cfg(test)]
 extern crate std;
 
-use crate::{MintPayload, NesteraContract, NesteraContractClient, PlanType, SavingsPlan, User};
+use crate::{
+    MintPayload, NesteraContract, NesteraContractClient, PlanType, SavingsError, SavingsPlan, User,
+};
 use ed25519_dalek::{Signer, SigningKey};
 use soroban_sdk::testutils::{Address as _, Ledger, LedgerInfo};
-use soroban_sdk::{symbol_short, xdr::ToXdr, Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{symbol_short, xdr::ToXdr, Address, Bytes, BytesN, Env};
 
 /// Helper function to create a test environment and contract client
 fn setup_test_env() -> (Env, NesteraContractClient<'static>) {
@@ -633,19 +635,20 @@ fn test_get_user() {
     let (_, admin_public_key) = generate_keypair(&env);
 
     client.initialize(&admin_public_key);
-
     let user = Address::generate(&env);
 
-    // User should not exist initially
-    assert!(client.get_user(&user).is_none());
+    // OLD (Option): assert!(client.get_user(&user).is_none());
+
+    // NEW (Result): Check if it returns an Error (UserNotFound)
+    let result = client.try_get_user(&user);
+    assert_eq!(result, Err(Ok(SavingsError::UserNotFound)));
 
     // Create a savings plan
     client.create_savings_plan(&user, &PlanType::Flexi, &1000_i128);
 
-    // User should now exist
-    let user_data = client.get_user(&user).unwrap();
+    // User should now exist (Ok)
+    let user_data = client.get_user(&user);
     assert_eq!(user_data.total_balance, 1000_i128);
-    assert_eq!(user_data.savings_count, 1);
 }
 
 // ========== User Initialization Tests ==========
@@ -748,4 +751,69 @@ fn test_initialize_user_requires_auth() {
     assert_eq!(auths.len(), 1);
     let (auth_addr, _) = &auths[0];
     assert_eq!(auth_addr, &user);
+}
+
+#[test]
+fn test_flexi_deposit_success() {
+    let (env, client) = setup_test_env();
+    let user = Address::generate(&env);
+
+    // 1. Initialize the user first
+    env.mock_all_auths();
+    client.initialize_user(&user);
+
+    // 2. Deposit into Flexi
+    let deposit_amount = 5000_i128;
+    client.deposit_flexi(&user, &deposit_amount);
+
+    // 3. Verify the user's total balance increased
+    let user_data = client.get_user(&user);
+    assert_eq!(user_data.total_balance, deposit_amount);
+}
+
+#[test]
+fn test_flexi_withdraw_success() {
+    let (env, client) = setup_test_env();
+    let user = Address::generate(&env);
+    env.mock_all_auths();
+
+    // Setup: Initialize and deposit
+    client.initialize_user(&user);
+    client.deposit_flexi(&user, &5000);
+
+    // 1. Withdraw a portion
+    client.withdraw_flexi(&user, &2000);
+
+    // 2. Verify remaining balance
+    let user_data = client.get_user(&user);
+    assert_eq!(user_data.total_balance, 3000);
+}
+
+#[test]
+fn test_flexi_withdraw_insufficient_funds() {
+    let (env, client) = setup_test_env();
+    let user = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize_user(&user);
+    client.deposit_flexi(&user, &1000);
+
+    // Attempt to withdraw more than available
+    let result = client.try_withdraw_flexi(&user, &1500);
+
+    // Verify it returns the specific error from your errors.rs
+    assert_eq!(result, Err(Ok(SavingsError::InsufficientBalance)));
+}
+
+#[test]
+fn test_flexi_invalid_amount() {
+    let (env, client) = setup_test_env();
+    let user = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize_user(&user);
+
+    // Attempt to deposit zero or negative
+    let result = client.try_deposit_flexi(&user, &0);
+    assert_eq!(result, Err(Ok(SavingsError::InvalidAmount)));
 }

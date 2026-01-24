@@ -1,12 +1,16 @@
 #![no_std]
 #![allow(non_snake_case)]
+mod flexi;
 mod storage_types;
+mod users;
 
+pub use crate::errors::SavingsError;
+pub use crate::storage_types::User;
 use soroban_sdk::{
     contract, contractimpl, panic_with_error, symbol_short, xdr::ToXdr, Address, Bytes, BytesN,
     Env, Symbol, Vec,
 };
-pub use storage_types::{DataKey, MintPayload, PlanType, SavingsPlan, User};
+pub use storage_types::{DataKey, MintPayload, PlanType, SavingsPlan};
 
 /// Custom error codes for the contract
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -190,10 +194,12 @@ impl NesteraContract {
             panic_with_error!(&env, ContractError::NotInitialized);
         }
 
-        let mut user_data = Self::get_user(env.clone(), user.clone()).unwrap_or(User {
-            total_balance: 0,
-            savings_count: 0,
-        });
+        let mut user_data = Self::get_user(env.clone(), user.clone())
+            .ok()
+            .unwrap_or(User {
+                total_balance: 0,
+                savings_count: 0,
+            });
 
         user_data.savings_count += 1;
         user_data.total_balance += initial_deposit;
@@ -238,7 +244,7 @@ impl NesteraContract {
     }
 
     pub fn get_user_savings_plans(env: Env, user: Address) -> Vec<SavingsPlan> {
-        let user_data = Self::get_user(env.clone(), user.clone());
+        let user_data = Self::get_user(env.clone(), user.clone()).ok();
         let mut plans = Vec::new(&env);
 
         if let Some(data) = user_data {
@@ -250,10 +256,6 @@ impl NesteraContract {
             }
         }
         plans
-    }
-
-    pub fn get_user(env: Env, user: Address) -> Option<User> {
-        env.storage().persistent().get(&DataKey::User(user))
     }
 
     /// Initialize a new user in the savings contract
@@ -269,6 +271,16 @@ impl NesteraContract {
     /// Get user data from the contract
     pub fn get_user(env: Env, user: Address) -> Result<User, SavingsError> {
         users::get_user(&env, &user)
+    }
+
+    /// Public entry point to deposit into Flexi Save
+    pub fn deposit_flexi(env: Env, user: Address, amount: i128) -> Result<(), SavingsError> {
+        flexi::flexi_deposit(env, user, amount)
+    }
+
+    /// Public entry point to withdraw from Flexi Save
+    pub fn withdraw_flexi(env: Env, user: Address, amount: i128) -> Result<(), SavingsError> {
+        flexi::flexi_withdraw(env, user, amount)
     }
 }
 
