@@ -1,6 +1,6 @@
+use crate::ensure_not_paused;
 use crate::errors::SavingsError;
 use crate::storage_types::{DataKey, GroupSave};
-use crate::ensure_not_paused;
 use crate::users;
 use soroban_sdk::{Address, Env, String, Vec};
 

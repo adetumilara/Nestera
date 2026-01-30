@@ -1,6 +1,6 @@
+use crate::ensure_not_paused;
 use crate::errors::SavingsError;
 use crate::storage_types::{DataKey, LockSave, User};
-use crate::ensure_not_paused;
 use crate::users;
 use soroban_sdk::{symbol_short, Address, Env, Vec};
 

@@ -1,8 +1,8 @@
 use soroban_sdk::{Address, Env};
 
+use crate::ensure_not_paused;
 use crate::errors::SavingsError;
 use crate::storage_types::{DataKey, User};
-use crate::ensure_not_paused;
 
 /// Check if a user exists in storage
 ///
