@@ -3,7 +3,9 @@ import React from 'react';
 import Hero from '../sections/Hero/Hero';
 import HowItWorks from '../components/HowItWorks';
 import FAQ from '../components/FAQ';
+
 import Footer from '../components/Footer';
+
 
 import React from "react";
 import Hero from "../sections/Hero/Hero";
@@ -31,6 +33,7 @@ const LandingPage: React.FC = () => {
 
 
       <SavingsProducts />
+
       <FAQ />
       <Newsletter />
 
