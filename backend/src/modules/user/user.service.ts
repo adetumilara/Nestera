@@ -8,6 +8,7 @@ const USER_SELECT = {
   email: true,
   name: true,
   bio: true,
+  avatarUrl: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -49,6 +50,16 @@ export class UserService {
   async create(data: Prisma.UserCreateInput) {
     return this.prisma.user.create({
       data,
+      select: USER_SELECT,
+    });
+  }
+
+  async updateAvatar(userId: string, avatarUrl: string) {
+    await this.findById(userId);
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl },
       select: USER_SELECT,
     });
   }
