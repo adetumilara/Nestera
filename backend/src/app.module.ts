@@ -6,6 +6,8 @@ import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { HealthModule } from './modules/health/health.module';
 import { BlockchainModule } from './modules/blockchain/blockchain.module';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -20,8 +22,20 @@ import { BlockchainModule } from './modules/blockchain/blockchain.module';
     }),
     HealthModule,
     BlockchainModule,
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
