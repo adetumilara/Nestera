@@ -18,6 +18,7 @@ mod lock;
 
 pub mod rewards;
 mod storage_types;
+pub mod strategy;
 mod ttl;
 mod upgrade;
 mod users;
@@ -34,6 +35,8 @@ pub use crate::storage_types::{
     AutoSave, DataKey, GoalSave, GoalSaveView, GroupSave, GroupSaveView, LockSave, LockSaveView,
     MintPayload, PlanType, SavingsPlan, User,
 };
+pub use crate::strategy::registry::StrategyInfo;
+pub use crate::strategy::routing::{StrategyPosition, StrategyPositionKey};
 
 /// Custom error codes for the contract administration
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -854,6 +857,110 @@ impl NesteraContract {
     /// Checks if governance is active
     pub fn is_governance_active(env: Env) -> bool {
         governance::is_governance_active(&env)
+    }
+
+    // ========== Strategy Functions ==========
+
+    /// Registers a new yield strategy (admin/governance only).
+    pub fn register_strategy(
+        env: Env,
+        caller: Address,
+        strategy_address: Address,
+        risk_level: u32,
+    ) -> Result<(), SavingsError> {
+        strategy::registry::register_strategy(&env, caller, strategy_address, risk_level)
+    }
+
+    /// Disables a registered yield strategy (admin/governance only).
+    pub fn disable_strategy(
+        env: Env,
+        caller: Address,
+        strategy_address: Address,
+    ) -> Result<(), SavingsError> {
+        strategy::registry::disable_strategy(&env, caller, strategy_address)
+    }
+
+    /// Returns info about a registered strategy.
+    pub fn get_strategy(
+        env: Env,
+        strategy_address: Address,
+    ) -> Result<StrategyInfo, SavingsError> {
+        strategy::registry::get_strategy(&env, strategy_address)
+    }
+
+    /// Returns all registered strategy addresses.
+    pub fn get_all_strategies(env: Env) -> Vec<Address> {
+        strategy::registry::get_all_strategies(&env)
+    }
+
+    /// Routes a LockSave deposit to a yield strategy.
+    pub fn route_lock_to_strategy(
+        env: Env,
+        caller: Address,
+        lock_id: u64,
+        strategy_address: Address,
+        amount: i128,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        let position_key = StrategyPositionKey::Lock(lock_id);
+        strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount)
+    }
+
+    /// Routes a GroupSave pooled deposit to a yield strategy.
+    pub fn route_group_to_strategy(
+        env: Env,
+        caller: Address,
+        group_id: u64,
+        strategy_address: Address,
+        amount: i128,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        let position_key = StrategyPositionKey::Group(group_id);
+        strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount)
+    }
+
+    /// Returns the strategy position for a lock plan.
+    pub fn get_lock_strategy_position(env: Env, lock_id: u64) -> Option<StrategyPosition> {
+        strategy::routing::get_position(&env, StrategyPositionKey::Lock(lock_id))
+    }
+
+    /// Returns the strategy position for a group plan.
+    pub fn get_group_strategy_position(env: Env, group_id: u64) -> Option<StrategyPosition> {
+        strategy::routing::get_position(&env, StrategyPositionKey::Group(group_id))
+    }
+
+    /// Withdraws funds from a lock's strategy position.
+    pub fn withdraw_lock_strategy(
+        env: Env,
+        caller: Address,
+        lock_id: u64,
+        to: Address,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        strategy::routing::withdraw_from_strategy(
+            &env,
+            StrategyPositionKey::Lock(lock_id),
+            to,
+        )
+    }
+
+    /// Withdraws funds from a group's strategy position.
+    pub fn withdraw_group_strategy(
+        env: Env,
+        caller: Address,
+        group_id: u64,
+        to: Address,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        strategy::routing::withdraw_from_strategy(
+            &env,
+            StrategyPositionKey::Group(group_id),
+            to,
+        )
     }
 }
 
