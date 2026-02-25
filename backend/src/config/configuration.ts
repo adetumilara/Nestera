@@ -13,6 +13,7 @@ export default () => ({
     horizonUrl: process.env.HORIZON_URL,
     contractId: process.env.CONTRACT_ID,
     webhookSecret: process.env.STELLAR_WEBHOOK_SECRET,
+    eventPollInterval: parseInt(process.env.STELLAR_EVENT_POLL_INTERVAL || '10000', 10),
   },
   redis: {
     url: process.env.REDIS_URL,
