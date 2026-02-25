@@ -209,6 +209,16 @@ pub enum SavingsError {
     ///
     /// Config initialization can only happen once.
     ConfigAlreadyInitialized = 91,
+
+    // ========== Strategy Errors (92-99) ==========
+    /// Returned when a yield strategy is not found in the registry.
+    StrategyNotFound = 92,
+
+    /// Returned when attempting to register a strategy that already exists.
+    StrategyAlreadyRegistered = 93,
+
+    /// Returned when attempting to deposit into a disabled strategy.
+    StrategyDisabled = 94,
 }
 
 #[cfg(test)]
@@ -254,6 +264,9 @@ mod tests {
             SavingsError::InvariantViolation as u32,
             SavingsError::InvalidFeeBps as u32,
             SavingsError::ConfigAlreadyInitialized as u32,
+            SavingsError::StrategyNotFound as u32,
+            SavingsError::StrategyAlreadyRegistered as u32,
+            SavingsError::StrategyDisabled as u32,
         ];
 
         let mut sorted = errors.clone();
