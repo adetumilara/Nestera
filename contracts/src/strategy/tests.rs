@@ -1,5 +1,4 @@
 use crate::errors::SavingsError;
-use crate::strategy::registry::{self, StrategyInfo};
 use crate::strategy::routing::{self, StrategyPositionKey};
 use crate::{NesteraContract, NesteraContractClient};
 use soroban_sdk::{testutils::Address as _, Address, BytesN, Env};

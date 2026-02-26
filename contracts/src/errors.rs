@@ -228,6 +228,17 @@ pub enum SavingsError {
 
     /// Returned when attempting to register a strategy that already exists.
     StrategyAlreadyRegistered = 96,
+
+    /// Returned when a reentrant call is detected during an external strategy interaction.
+    ///
+    /// This is triggered by the reentrancy guard when a second call tries to enter
+    /// a strategy function while the first is still in progress.
+    ReentrancyDetected = 97,
+
+    /// Returned when an external strategy call returns an invalid response.
+    ///
+    /// E.g. the actual returned amount is 0 or negative when a positive value was expected.
+    InvalidStrategyResponse = 98,
 }
 
 #[cfg(test)]
@@ -276,6 +287,8 @@ mod tests {
             SavingsError::StrategyNotFound as u32,
             SavingsError::StrategyAlreadyRegistered as u32,
             SavingsError::StrategyDisabled as u32,
+            SavingsError::ReentrancyDetected as u32,
+            SavingsError::InvalidStrategyResponse as u32,
         ];
 
         let mut sorted = errors.clone();

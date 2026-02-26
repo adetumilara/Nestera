@@ -155,6 +155,10 @@ pub enum DataKey {
     StrategyTotalPrincipal(Address),
     /// Track accumulated yield designated for Nestera users from a strategy
     StrategyYield(Address),
+    /// Aggregate performance metrics for a strategy (total deposited, withdrawn, harvested, APY)
+    StrategyPerformance(Address),
+    /// Reentrancy guard flag – set to true while an external strategy call is in flight
+    ReentrancyGuard,
     User(Address),
     /// Maps a (user address, plan_id) tuple to a SavingsPlan
     SavingsPlan(Address, u64),
@@ -211,6 +215,22 @@ pub struct MintPayload {
     pub timestamp: u64,
     /// Expiry duration in seconds (signature valid for timestamp + expiry_duration)
     pub expiry_duration: u64,
+}
+
+/// Performance metrics for a yield strategy (frontend-ready, read-only view)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StrategyPerformance {
+    /// Cumulative amount deposited into this strategy (all time)
+    pub total_deposited: i128,
+    /// Cumulative amount withdrawn from this strategy (all time)
+    pub total_withdrawn: i128,
+    /// Cumulative yield harvested from this strategy (all time)
+    pub total_harvested: i128,
+    /// APY estimate in basis points (e.g. 500 = 5.00%).
+    /// Computed as: (total_harvested * 10_000) / total_deposited
+    /// Returns 0 when no deposits have been made.
+    pub apy_estimate_bps: u32,
 }
 
 // View-specific structures (used by views.rs module)
