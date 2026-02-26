@@ -10,12 +10,15 @@ mod config;
 mod errors;
 mod flexi;
 mod goal;
+mod governance;
+mod governance_events;
 mod group;
 mod invariants;
 mod lock;
 
 pub mod rewards;
 mod storage_types;
+pub mod strategy;
 mod ttl;
 mod upgrade;
 mod users;
@@ -32,6 +35,8 @@ pub use crate::storage_types::{
     AutoSave, DataKey, GoalSave, GoalSaveView, GroupSave, GroupSaveView, LockSave, LockSaveView,
     MintPayload, PlanType, SavingsPlan, User,
 };
+pub use crate::strategy::registry::StrategyInfo;
+pub use crate::strategy::routing::{StrategyPosition, StrategyPositionKey};
 
 /// Custom error codes for the contract administration
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -127,6 +132,20 @@ mod fee_tests {
 
 #[contractimpl]
 impl NesteraContract {
+    /// Returns all proposal IDs the user has voted on
+    pub fn get_user_voted_proposals(env: Env, user: Address) -> Vec<u64> {
+        governance::get_user_voted_proposals(&env, user)
+    }
+
+    /// Returns all active (non-executed, within voting period) proposal IDs
+    pub fn get_active_proposals(env: Env) -> Vec<u64> {
+        governance::get_active_proposals(&env)
+    }
+
+    /// Returns vote counts for a proposal
+    pub fn get_proposal_votes(env: Env, proposal_id: u64) -> (u128, u128, u128) {
+        governance::get_proposal_votes(&env, proposal_id)
+    }
     /// Initialize a new user in the system
     pub fn init_user(env: Env, user: Address) -> User {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
@@ -414,29 +433,25 @@ impl NesteraContract {
         Ok(())
     }
 
-    pub fn set_flexi_rate(env: Env, rate: i128) -> Result<(), SavingsError> {
-        let admin = env.storage().instance().get(&DataKey::Admin).unwrap();
-        let admin_address: Address = admin; // Type casting for clarity, though get returns generic
-        admin_address.require_auth();
-        rates::set_flexi_rate(&env, rate)
+    pub fn set_flexi_rate(env: Env, caller: Address, rate: i128) -> Result<(), SavingsError> {
+        rates::set_flexi_rate(&env, caller, rate)
     }
 
-    pub fn set_goal_rate(env: Env, rate: i128) -> Result<(), SavingsError> {
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        admin.require_auth();
-        rates::set_goal_rate(&env, rate)
+    pub fn set_goal_rate(env: Env, caller: Address, rate: i128) -> Result<(), SavingsError> {
+        rates::set_goal_rate(&env, caller, rate)
     }
 
-    pub fn set_group_rate(env: Env, rate: i128) -> Result<(), SavingsError> {
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        admin.require_auth();
-        rates::set_group_rate(&env, rate)
+    pub fn set_group_rate(env: Env, caller: Address, rate: i128) -> Result<(), SavingsError> {
+        rates::set_group_rate(&env, caller, rate)
     }
 
-    pub fn set_lock_rate(env: Env, duration_days: u64, rate: i128) -> Result<(), SavingsError> {
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        admin.require_auth();
-        rates::set_lock_rate(&env, duration_days, rate)
+    pub fn set_lock_rate(
+        env: Env,
+        caller: Address,
+        duration_days: u64,
+        rate: i128,
+    ) -> Result<(), SavingsError> {
+        rates::set_lock_rate(&env, caller, duration_days, rate)
     }
 
     pub fn set_early_break_fee_bps(env: Env, bps: u32) -> Result<(), SavingsError> {
@@ -473,39 +488,23 @@ impl NesteraContract {
         Ok(())
     }
 
-    pub fn pause(env: Env, admin: Address) -> Result<(), SavingsError> {
-        admin.require_auth();
-        let stored_admin: Option<Address> = env.storage().instance().get(&DataKey::Admin);
-
-        // Use .clone() here so 'admin' isn't moved
-        if stored_admin != Some(admin.clone()) {
-            return Err(SavingsError::Unauthorized);
-        }
+    pub fn pause(env: Env, caller: Address) -> Result<(), SavingsError> {
+        caller.require_auth();
+        governance::validate_admin_or_governance(&env, &caller)?;
 
         env.storage().persistent().set(&DataKey::Paused, &true);
-
-        // Extend TTL on config update
         ttl::extend_config_ttl(&env, &DataKey::Paused);
-
-        env.events().publish((symbol_short!("pause"), admin), ());
+        env.events().publish((symbol_short!("pause"), caller), ());
         Ok(())
     }
 
-    pub fn unpause(env: Env, admin: Address) -> Result<(), SavingsError> {
-        admin.require_auth();
-        let stored_admin: Option<Address> = env.storage().instance().get(&DataKey::Admin);
-
-        // Use .clone() here too
-        if stored_admin != Some(admin.clone()) {
-            return Err(SavingsError::Unauthorized);
-        }
+    pub fn unpause(env: Env, caller: Address) -> Result<(), SavingsError> {
+        caller.require_auth();
+        governance::validate_admin_or_governance(&env, &caller)?;
 
         env.storage().persistent().set(&DataKey::Paused, &false);
-
-        // Extend TTL on config update
         ttl::extend_config_ttl(&env, &DataKey::Paused);
-
-        env.events().publish((symbol_short!("unpause"), admin), ());
+        env.events().publish((symbol_short!("unpause"), caller), ());
         Ok(())
     }
 
@@ -724,6 +723,115 @@ impl NesteraContract {
             .unwrap_or(0)
     }
 
+    // ========== Rewards Functions ==========
+
+    pub fn init_rewards_config(
+        env: Env,
+        admin: Address,
+        points_per_token: u32,
+        streak_bonus_bps: u32,
+        long_lock_bonus_bps: u32,
+        goal_completion_bonus: u32,
+        enabled: bool,
+        min_deposit_for_rewards: i128,
+        action_cooldown_seconds: u64,
+        max_daily_points: u128,
+        max_streak_multiplier: u32,
+    ) -> Result<(), SavingsError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(SavingsError::Unauthorized)?;
+        stored_admin.require_auth();
+
+        if admin != stored_admin {
+            return Err(SavingsError::Unauthorized);
+        }
+
+        let config = rewards::storage_types::RewardsConfig {
+            points_per_token,
+            streak_bonus_bps,
+            long_lock_bonus_bps,
+            goal_completion_bonus,
+            enabled,
+            min_deposit_for_rewards,
+            action_cooldown_seconds,
+            max_daily_points,
+            max_streak_multiplier,
+        };
+
+        rewards::config::initialize_rewards_config(&env, config)
+    }
+
+    pub fn initialize_rewards_config(
+        env: Env,
+        config: rewards::storage_types::RewardsConfig,
+    ) -> Result<(), SavingsError> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(SavingsError::Unauthorized)?;
+        admin.require_auth();
+        rewards::config::initialize_rewards_config(&env, config)
+    }
+
+    pub fn update_rewards_config(
+        env: Env,
+        admin: Address,
+        config: rewards::storage_types::RewardsConfig,
+    ) -> Result<(), SavingsError> {
+        rewards::config::update_rewards_config(&env, admin, config)
+    }
+
+    pub fn get_rewards_config(
+        env: Env,
+    ) -> Result<rewards::storage_types::RewardsConfig, SavingsError> {
+        rewards::config::get_rewards_config(&env)
+    }
+
+    pub fn get_user_rewards(env: Env, user: Address) -> rewards::storage_types::UserRewards {
+        rewards::storage::get_user_rewards(&env, user)
+    }
+
+    pub fn update_streak(env: Env, user: Address) -> Result<u32, SavingsError> {
+        user.require_auth();
+        rewards::storage::update_streak(&env, user)
+    }
+
+    // ========== Ranking Functions ==========
+
+    /// Gets the top N users by reward points
+    /// Read-only - no state mutation
+    pub fn get_top_users(env: Env, limit: u32) -> Vec<(Address, u128)> {
+        rewards::ranking::get_top_users(&env, limit)
+    }
+
+    /// Gets the rank of a specific user (1-indexed)
+    /// Returns 0 if user has no points or is not ranked
+    /// Read-only - no state mutation
+    pub fn get_user_rank(env: Env, user: Address) -> u32 {
+        rewards::ranking::get_user_rank(&env, &user)
+    }
+
+    /// Gets detailed ranking information for a user
+    /// Returns (rank, total_points, total_users) or None
+    /// Read-only - no state mutation
+    pub fn get_user_ranking_details(env: Env, user: Address) -> Option<(u32, u128, u32)> {
+        rewards::ranking::get_user_ranking_details(&env, &user)
+    }
+
+    // ========== Points Redemption ==========
+
+    /// Redeem points for protocol benefits (fee discounts, boost multiplier, etc.)
+    /// Validates sufficient balance and deducts points safely
+    /// Emits PointsRedeemed event on success
+    pub fn redeem_points(env: Env, user: Address, amount: u128) -> Result<(), SavingsError> {
+        user.require_auth();
+        rewards::redemption::redeem_points(&env, user, amount)
+    }
+
     // ========== AutoSave Functions ==========
 
     /// Creates a new AutoSave schedule for recurring Flexi deposits
@@ -818,6 +926,234 @@ impl NesteraContract {
     pub fn version(env: Env) -> u32 {
         upgrade::get_version(&env)
     }
+
+    // ========== Governance Functions ==========
+
+    /// Initializes voting configuration (admin only)
+    pub fn init_voting_config(
+        env: Env,
+        admin: Address,
+        quorum: u32,
+        voting_period: u64,
+        timelock_duration: u64,
+        proposal_threshold: u128,
+        max_voting_power: u128,
+    ) -> Result<(), SavingsError> {
+        let config = governance::VotingConfig {
+            quorum,
+            voting_period,
+            timelock_duration,
+            proposal_threshold,
+            max_voting_power,
+        };
+        governance::init_voting_config(&env, admin, config)
+    }
+
+    /// Gets the voting configuration
+    pub fn get_voting_config(env: Env) -> Result<governance::VotingConfig, SavingsError> {
+        governance::get_voting_config(&env)
+    }
+
+    /// Creates a new governance proposal
+    pub fn create_proposal(
+        env: Env,
+        creator: Address,
+        description: String,
+    ) -> Result<u64, SavingsError> {
+        governance::create_proposal(&env, creator, description)
+    }
+
+    /// Creates a governance proposal with an action
+    pub fn create_action_proposal(
+        env: Env,
+        creator: Address,
+        description: String,
+        action: governance::ProposalAction,
+    ) -> Result<u64, SavingsError> {
+        governance::create_action_proposal(&env, creator, description, action)
+    }
+
+    /// Gets a proposal by ID
+    pub fn get_proposal(env: Env, proposal_id: u64) -> Option<governance::Proposal> {
+        governance::get_proposal(&env, proposal_id)
+    }
+
+    /// Gets an action proposal by ID
+    pub fn get_action_proposal(env: Env, proposal_id: u64) -> Option<governance::ActionProposal> {
+        governance::get_action_proposal(&env, proposal_id)
+    }
+
+    /// Lists all proposal IDs
+    pub fn list_proposals(env: Env) -> Vec<u64> {
+        governance::list_proposals(&env)
+    }
+
+    /// Gets the voting power for a user based on their lifetime deposited funds
+    pub fn get_voting_power(env: Env, user: Address) -> u128 {
+        governance::get_voting_power(&env, &user)
+    }
+
+    /// Casts a weighted vote on a proposal
+    pub fn vote(
+        env: Env,
+        proposal_id: u64,
+        vote_type: u32,
+        voter: Address,
+    ) -> Result<(), SavingsError> {
+        governance::vote(&env, proposal_id, vote_type, voter)
+    }
+
+    /// Checks if a user has voted on a proposal
+    pub fn has_voted(env: Env, proposal_id: u64, voter: Address) -> bool {
+        governance::has_voted(&env, proposal_id, &voter)
+    }
+
+    /// Queues a proposal for execution after timelock
+    pub fn queue_proposal(env: Env, proposal_id: u64) -> Result<(), SavingsError> {
+        governance::queue_proposal(&env, proposal_id)
+    }
+
+    /// Executes a queued proposal after timelock period
+    pub fn execute_proposal(env: Env, proposal_id: u64) -> Result<(), SavingsError> {
+        governance::execute_proposal(&env, proposal_id)
+    }
+
+    /// Activates governance (admin only, one-time)
+    pub fn activate_governance(env: Env, admin: Address) -> Result<(), SavingsError> {
+        governance::activate_governance(&env, admin)
+    }
+
+    /// Checks if governance is active
+    pub fn is_governance_active(env: Env) -> bool {
+        governance::is_governance_active(&env)
+    }
+
+    // ========== Strategy Functions ==========
+
+    /// Registers a new yield strategy (admin/governance only).
+    pub fn register_strategy(
+        env: Env,
+        caller: Address,
+        strategy_address: Address,
+        risk_level: u32,
+    ) -> Result<(), SavingsError> {
+        strategy::registry::register_strategy(&env, caller, strategy_address, risk_level)
+    }
+
+    /// Disables a registered yield strategy (admin/governance only).
+    pub fn disable_strategy(
+        env: Env,
+        caller: Address,
+        strategy_address: Address,
+    ) -> Result<(), SavingsError> {
+        strategy::registry::disable_strategy(&env, caller, strategy_address)
+    }
+
+    /// Returns info about a registered strategy.
+    pub fn get_strategy(env: Env, strategy_address: Address) -> Result<StrategyInfo, SavingsError> {
+        strategy::registry::get_strategy(&env, strategy_address)
+    }
+
+    /// Returns all registered strategy addresses.
+    pub fn get_all_strategies(env: Env) -> Vec<Address> {
+        strategy::registry::get_all_strategies(&env)
+    }
+
+    /// Routes a LockSave deposit to a yield strategy.
+    pub fn route_lock_to_strategy(
+        env: Env,
+        caller: Address,
+        lock_id: u64,
+        strategy_address: Address,
+        amount: i128,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        let position_key = StrategyPositionKey::Lock(lock_id);
+        strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount)
+    }
+
+    /// Routes a GroupSave pooled deposit to a yield strategy.
+    pub fn route_group_to_strategy(
+        env: Env,
+        caller: Address,
+        group_id: u64,
+        strategy_address: Address,
+        amount: i128,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        let position_key = StrategyPositionKey::Group(group_id);
+        strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount)
+    }
+
+    /// Returns the strategy position for a lock plan.
+    pub fn get_lock_strategy_position(env: Env, lock_id: u64) -> Option<StrategyPosition> {
+        strategy::routing::get_position(&env, StrategyPositionKey::Lock(lock_id))
+    }
+
+    /// Returns the strategy position for a group plan.
+    pub fn get_group_strategy_position(env: Env, group_id: u64) -> Option<StrategyPosition> {
+        strategy::routing::get_position(&env, StrategyPositionKey::Group(group_id))
+    }
+
+    /// Withdraws funds from a lock's strategy position.
+    pub fn withdraw_lock_strategy(
+        env: Env,
+        caller: Address,
+        lock_id: u64,
+        to: Address,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        strategy::routing::withdraw_from_strategy(&env, StrategyPositionKey::Lock(lock_id), to)
+    }
+
+    /// Withdraws funds from a group's strategy position.
+    pub fn withdraw_group_strategy(
+        env: Env,
+        caller: Address,
+        group_id: u64,
+        to: Address,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        strategy::routing::withdraw_from_strategy(&env, StrategyPositionKey::Group(group_id), to)
+    }
+
+    /// Harvests yield from a yield strategy.
+    ///
+    /// Calculates profit as `strategy_balance - principal`, calls `strategy_harvest`,
+    /// allocates the protocol fee to treasury, and credits the remainder to users.
+    ///
+    /// Returns the total yield harvested (treasury fee + user yield).
+    pub fn harvest_strategy(
+        env: Env,
+        caller: Address,
+        strategy_address: Address,
+    ) -> Result<i128, SavingsError> {
+        caller.require_auth();
+        ensure_not_paused(&env)?;
+        strategy::routing::harvest_strategy(&env, strategy_address)
+    }
+
+    /// Returns the total principal that Nestera has deposited into a given strategy.
+    ///
+    /// This is the sum of all routed deposits minus all withdrawals.
+    pub fn get_strategy_principal(env: Env, strategy_address: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::StrategyTotalPrincipal(strategy_address))
+            .unwrap_or(0)
+    }
+
+    /// Returns the accumulated user yield credited from harvesting a given strategy.
+    pub fn get_strategy_yield(env: Env, strategy_address: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::StrategyYield(strategy_address))
+            .unwrap_or(0)
+    }
 }
 
 #[cfg(test)]
@@ -825,8 +1161,16 @@ mod admin_tests;
 #[cfg(test)]
 mod config_tests;
 #[cfg(test)]
+mod execution_tests;
+#[cfg(test)]
+mod governance_tests;
+#[cfg(test)]
 mod rates_test;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
+mod transition_tests;
+#[cfg(test)]
 mod ttl_tests;
+#[cfg(test)]
+mod voting_tests;
