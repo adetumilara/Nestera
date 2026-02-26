@@ -67,7 +67,7 @@ mod governance_tests {
     use soroban_sdk::IntoVal;
     use soroban_sdk::{
         testutils::{Address as _, Events},
-        Address, BytesN, Env, String, Symbol,
+        Address, BytesN, Env, String,
     };
 
     fn setup_contract() -> (Env, NesteraContractClient<'static>, Address) {

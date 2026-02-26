@@ -1,7 +1,8 @@
 #![no_std]
 #![allow(non_snake_case)]
 use soroban_sdk::{
-    contract, contractimpl, panic_with_error, symbol_short, xdr::ToXdr, Address, Bytes, BytesN, Env, String, Symbol, Vec,
+    contract, contractimpl, panic_with_error, symbol_short, xdr::ToXdr, Address, Bytes, BytesN,
+    Env, String, Symbol, Vec,
 };
 
 mod autosave;
@@ -310,7 +311,8 @@ impl NesteraContract {
     pub fn create_lock_save(env: Env, user: Address, amount: i128, duration: u64) -> u64 {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         user.require_auth();
-        crate::security::acquire_reentrancy_guard(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        crate::security::acquire_reentrancy_guard(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let res = lock::create_lock_save(&env, user, amount, duration)
             .unwrap_or_else(|e| panic_with_error!(&env, e));
         crate::security::release_reentrancy_guard(&env);
@@ -320,8 +322,10 @@ impl NesteraContract {
     pub fn withdraw_lock_save(env: Env, user: Address, lock_id: u64) -> i128 {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         user.require_auth();
-        crate::security::acquire_reentrancy_guard(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
-        let res = lock::withdraw_lock_save(&env, user, lock_id).unwrap_or_else(|e| panic_with_error!(&env, e));
+        crate::security::acquire_reentrancy_guard(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        let res = lock::withdraw_lock_save(&env, user, lock_id)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         crate::security::release_reentrancy_guard(&env);
         res
     }
@@ -344,7 +348,8 @@ impl NesteraContract {
         initial_deposit: i128,
     ) -> u64 {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
-        crate::security::acquire_reentrancy_guard(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        crate::security::acquire_reentrancy_guard(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let res = goal::create_goal_save(&env, user, goal_name, target_amount, initial_deposit)
             .unwrap_or_else(|e| panic_with_error!(&env, e));
         crate::security::release_reentrancy_guard(&env);
@@ -353,7 +358,8 @@ impl NesteraContract {
 
     pub fn deposit_to_goal_save(env: Env, user: Address, goal_id: u64, amount: i128) {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
-        crate::security::acquire_reentrancy_guard(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        crate::security::acquire_reentrancy_guard(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         goal::deposit_to_goal_save(&env, user, goal_id, amount)
             .unwrap_or_else(|e| panic_with_error!(&env, e));
         crate::security::release_reentrancy_guard(&env);
@@ -361,7 +367,8 @@ impl NesteraContract {
 
     pub fn withdraw_completed_goal_save(env: Env, user: Address, goal_id: u64) -> i128 {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
-        crate::security::acquire_reentrancy_guard(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        crate::security::acquire_reentrancy_guard(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let res = goal::withdraw_completed_goal_save(&env, user, goal_id)
             .unwrap_or_else(|e| panic_with_error!(&env, e));
         crate::security::release_reentrancy_guard(&env);
@@ -370,8 +377,10 @@ impl NesteraContract {
 
     pub fn break_goal_save(env: Env, user: Address, goal_id: u64) -> i128 {
         ensure_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
-        crate::security::acquire_reentrancy_guard(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
-        let res = goal::break_goal_save(&env, user, goal_id).unwrap_or_else(|e| panic_with_error!(&env, e));
+        crate::security::acquire_reentrancy_guard(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        let res = goal::break_goal_save(&env, user, goal_id)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         crate::security::release_reentrancy_guard(&env);
         res
     }
@@ -1131,7 +1140,8 @@ impl NesteraContract {
         ensure_not_paused(&env)?;
         crate::security::acquire_reentrancy_guard(&env)?;
         let position_key = StrategyPositionKey::Lock(lock_id);
-        let res = strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount);
+        let res =
+            strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount);
         crate::security::release_reentrancy_guard(&env);
         res
     }
@@ -1148,7 +1158,8 @@ impl NesteraContract {
         ensure_not_paused(&env)?;
         crate::security::acquire_reentrancy_guard(&env)?;
         let position_key = StrategyPositionKey::Group(group_id);
-        let res = strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount);
+        let res =
+            strategy::routing::route_to_strategy(&env, strategy_address, position_key, amount);
         crate::security::release_reentrancy_guard(&env);
         res
     }
@@ -1173,7 +1184,8 @@ impl NesteraContract {
         caller.require_auth();
         ensure_not_paused(&env)?;
         crate::security::acquire_reentrancy_guard(&env)?;
-        let res = strategy::routing::withdraw_from_strategy(&env, StrategyPositionKey::Lock(lock_id), to);
+        let res =
+            strategy::routing::withdraw_from_strategy(&env, StrategyPositionKey::Lock(lock_id), to);
         crate::security::release_reentrancy_guard(&env);
         res
     }
@@ -1188,7 +1200,11 @@ impl NesteraContract {
         caller.require_auth();
         ensure_not_paused(&env)?;
         crate::security::acquire_reentrancy_guard(&env)?;
-        let res = strategy::routing::withdraw_from_strategy(&env, StrategyPositionKey::Group(group_id), to);
+        let res = strategy::routing::withdraw_from_strategy(
+            &env,
+            StrategyPositionKey::Group(group_id),
+            to,
+        );
         crate::security::release_reentrancy_guard(&env);
         res
     }
@@ -1241,8 +1257,6 @@ mod transition_tests;
 mod ttl_tests;
 #[cfg(test)]
 mod voting_tests;
-
-
 
 #[cfg(test)]
 #[cfg(test)]

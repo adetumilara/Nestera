@@ -141,7 +141,10 @@ pub fn route_to_strategy(
 
     // Update performance: record deposit
     let mut perf = load_performance(env, &strategy_address);
-    perf.total_deposited = perf.total_deposited.checked_add(amount).unwrap_or(i128::MAX);
+    perf.total_deposited = perf
+        .total_deposited
+        .checked_add(amount)
+        .unwrap_or(i128::MAX);
     perf.apy_estimate_bps = compute_apy_bps(perf.total_deposited, perf.total_harvested);
     save_performance(env, &strategy_address, &perf);
 

@@ -1,9 +1,6 @@
-use crate::errors::SavingsError;
 use crate::strategy::interface::YieldStrategy;
 use crate::{NesteraContract, NesteraContractClient};
-use soroban_sdk::{
-    contract, contractimpl, testutils::Address as _, Address, BytesN, Env, IntoVal, Symbol,
-};
+use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, BytesN, Env, Symbol};
 
 #[contract]
 pub struct MaliciousStrategy;
