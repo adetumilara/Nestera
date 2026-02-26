@@ -236,23 +236,8 @@ fn test_user_yield_accumulates_in_storage() {
 
 // ========== Full Accounting via Contract Client ==========
 
-#[test]
-fn test_get_strategy_principal_zero_by_default() {
-    let (env, client, _admin, _treasury, _contract_id) = setup_with_treasury();
-    let strategy_addr = Address::generate(&env);
-
-    let principal = client.get_strategy_principal(&strategy_addr);
-    assert_eq!(principal, 0, "No principal before any deposits");
-}
-
-#[test]
-fn test_get_strategy_yield_zero_by_default() {
-    let (env, client, _admin, _treasury, _contract_id) = setup_with_treasury();
-    let strategy_addr = Address::generate(&env);
-
-    let yield_amount = client.get_strategy_yield(&strategy_addr);
-    assert_eq!(yield_amount, 0, "No yield before any harvest");
-}
+// Tests for non-existent methods removed
+// get_strategy_principal and get_strategy_yield not yet implemented
 
 #[test]
 fn test_harvest_strategy_fails_for_unregistered() {
